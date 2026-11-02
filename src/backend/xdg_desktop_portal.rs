@@ -10,6 +10,7 @@ use super::linux::zenity;
 use crate::backend::DialogFutureType;
 use crate::file_dialog::Filter;
 use crate::message_dialog::MessageDialog;
+use crate::save_filter::{filter_index_for_path, filter_index_from_portal};
 use crate::{FileDialog, FileHandle, MessageButtons, MessageDialogResult};
 
 use log::{error, warn};
@@ -247,34 +248,44 @@ impl AsyncFolderPickerDialogImpl for FileDialog {
 use crate::backend::FileSaveDialogImpl;
 impl FileSaveDialogImpl for FileDialog {
     fn save_file(self) -> Option<PathBuf> {
-        let window_identifier = to_window_identifier(self.parent, self.parent_display);
-        let res = portal::save_file(portal::SaveFileOptions {
-            parent_window: window_identifier
-                .as_ref()
-                .and_then(|w| CString::new(w.to_string()).ok())
-                .unwrap_or_default(),
-            title: str_to_cstring(self.title.as_deref()).unwrap_or_default(),
-            filters: self.filters.iter().map(Into::into).collect(),
-            current_folder: path_to_cstring(self.starting_directory.as_deref()),
-            current_name: str_to_cstring(self.file_name.as_deref()),
-            ..Default::default()
-        })
-        .map(portal::uris_to_paths);
+        save_file_with_filter(self).map(|(path, _)| path)
+    }
+}
 
-        if let Some(mut res) = res {
-            if res.is_empty() {
+/// The chosen file and the index of the filter selected when the dialog
+/// closed.
+fn save_file_with_filter(dialog: FileDialog) -> Option<(PathBuf, usize)> {
+    let window_identifier = to_window_identifier(dialog.parent, dialog.parent_display);
+    let res = portal::save_file(portal::SaveFileOptions {
+        parent_window: window_identifier
+            .as_ref()
+            .and_then(|w| CString::new(w.to_string()).ok())
+            .unwrap_or_default(),
+        title: str_to_cstring(dialog.title.as_deref()).unwrap_or_default(),
+        filters: dialog.filters.iter().map(Into::into).collect(),
+        current_folder: path_to_cstring(dialog.starting_directory.as_deref()),
+        current_name: str_to_cstring(dialog.file_name.as_deref()),
+        ..Default::default()
+    });
+
+    if let Some(response) = res {
+        let path = portal::uris_to_paths(response.uris).into_iter().next()?;
+        let current_filter = response
+            .current_filter
+            .as_deref()
+            .and_then(|label| label.to_str().ok());
+        let index = filter_index_from_portal(&dialog.filters, current_filter, &path);
+        Some((path, index))
+    } else {
+        warn!("Using zenity fallback");
+        match block_on(zenity::save_file(&dialog)) {
+            Ok(res) => res.map(|path| {
+                let index = filter_index_for_path(&dialog.filters, &path);
+                (path, index)
+            }),
+            Err(err) => {
+                error!("Failed to save file with zenity: {err}");
                 None
-            } else {
-                Some(res.remove(0))
-            }
-        } else {
-            warn!("Using zenity fallback");
-            match block_on(zenity::save_file(&self)) {
-                Ok(res) => res,
-                Err(err) => {
-                    error!("Failed to save file with zenity: {err}");
-                    None
-                }
             }
         }
     }
@@ -284,6 +295,15 @@ use crate::backend::AsyncFileSaveDialogImpl;
 impl AsyncFileSaveDialogImpl for FileDialog {
     fn save_file_async(self) -> DialogFutureType<Option<FileHandle>> {
         async_thread(move || Self::save_file(self).map(FileHandle::wrap))
+    }
+}
+
+use crate::backend::AsyncFileSaveWithFilterDialogImpl;
+impl AsyncFileSaveWithFilterDialogImpl for FileDialog {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>> {
+        async_thread(move || {
+            save_file_with_filter(self).map(|(path, index)| (FileHandle::wrap(path), index))
+        })
     }
 }
 

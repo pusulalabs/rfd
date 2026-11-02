@@ -26,6 +26,15 @@ pub fn uris_to_paths(uris: Vec<CString>) -> Vec<PathBuf> {
         .collect()
 }
 
+/// What the portal answered: no `uris` when the user cancelled.
+#[derive(Debug, Default, PartialEq)]
+pub struct Response {
+    pub uris: Vec<CString>,
+    /// The label of the filter selected when the dialog closed. Portals may
+    /// leave it out.
+    pub current_filter: Option<CString>,
+}
+
 pub fn open_file(opts: OpenFileOptions) -> Option<Vec<CString>> {
     let mut conn = Connection::new()?;
 
@@ -53,10 +62,10 @@ pub fn open_file(opts: OpenFileOptions) -> Option<Vec<CString>> {
         register_response_listener(&mut conn, &got_handle_path);
     }
 
-    wait_for_response(&mut conn, &handle_path)
+    wait_for_response(&mut conn, &handle_path).map(|response| response.uris)
 }
 
-pub fn save_file(opts: SaveFileOptions) -> Option<Vec<CString>> {
+pub fn save_file(opts: SaveFileOptions) -> Option<Response> {
     let mut conn = Connection::new()?;
 
     let handle_path = generate_response_path(&mut conn, &opts.handle_token);
@@ -126,7 +135,7 @@ enum ResponseCode {
     // Other = 2,
 }
 
-fn wait_for_response(conn: &mut Connection, handle_path: &CStr) -> Option<Vec<CString>> {
+fn wait_for_response(conn: &mut Connection, handle_path: &CStr) -> Option<Response> {
     loop {
         conn.read_write(-1);
         while let Some(signal) = conn.pop_message() {
@@ -144,7 +153,7 @@ fn wait_for_response(conn: &mut Connection, handle_path: &CStr) -> Option<Vec<CS
     }
 }
 
-fn parse_response(msg: &Message) -> Option<Vec<CString>> {
+fn parse_response(msg: &Message) -> Option<Response> {
     let mut iter = MessageIter::from_msg(msg);
 
     let Some(response_code) = iter.get_u32() else {
@@ -152,7 +161,7 @@ fn parse_response(msg: &Message) -> Option<Vec<CString>> {
         return None;
     };
     if response_code != ResponseCode::Success as u32 {
-        return Some(vec![]);
+        return Some(Response::default());
     }
 
     if !iter.next() {
@@ -166,6 +175,8 @@ fn parse_response(msg: &Message) -> Option<Vec<CString>> {
     }
 
     let mut dict_iter = iter.iter_recurse();
+    let mut uris = None;
+    let mut current_filter = None;
 
     while dict_iter.get_arg_type() == ffi::DBUS_TYPE_DICT_ENTRY {
         let mut entry_iter = dict_iter.iter_recurse();
@@ -179,18 +190,123 @@ fn parse_response(msg: &Message) -> Option<Vec<CString>> {
         if key.as_c_str() == c"uris" {
             if entry_iter.get_arg_type() == ffi::DBUS_TYPE_VARIANT {
                 let mut var_iter = entry_iter.iter_recurse();
-                return Some(var_iter.get_string_array());
+                uris = Some(var_iter.get_string_array());
             } else {
                 log::error!(
                     "Response.uris type {} != VARIANT",
                     entry_iter.get_arg_type()
                 );
             }
+        } else if key.as_c_str() == c"current_filter" {
+            current_filter = filter_label(&mut entry_iter);
         }
 
         dict_iter.next();
     }
 
-    log::error!("Response.uris was not found");
-    None
+    let Some(uris) = uris else {
+        log::error!("Response.uris was not found");
+        return None;
+    };
+    Some(Response {
+        uris,
+        current_filter,
+    })
+}
+
+/// The label of a `current_filter` variant, whose filter is a `(sa(us))`
+/// struct of the label and its patterns.
+fn filter_label(entry_iter: &mut MessageIter) -> Option<CString> {
+    if entry_iter.get_arg_type() != ffi::DBUS_TYPE_VARIANT {
+        log::error!(
+            "Response.current_filter type {} != VARIANT",
+            entry_iter.get_arg_type()
+        );
+        return None;
+    }
+    let mut filter_iter = entry_iter.iter_recurse();
+    if filter_iter.get_arg_type() != ffi::DBUS_TYPE_STRUCT {
+        log::error!(
+            "Response.current_filter type {} != STRUCT",
+            filter_iter.get_arg_type()
+        );
+        return None;
+    }
+    filter_iter.iter_recurse().get_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `Response` signal body: the response code, then `results`, holding
+    /// `uris` and, when given, `current_filter`.
+    fn response_message(code: u32, uris: &[&CStr], current_filter: Option<&CStr>) -> Message {
+        assert!(
+            ffi::Libdbus::open_libdbus().is_some(),
+            "the portal tests need libdbus-1"
+        );
+        let mut msg = Message::new_method_call(
+            c"org.freedesktop.portal.Desktop",
+            c"/org/freedesktop/portal/desktop",
+            c"org.freedesktop.portal.Request",
+            c"Response",
+        )
+        .expect("a D-Bus message");
+        let mut iter = MessageIter::init_append(&mut msg);
+        iter.append_u32(code);
+        iter.with_container(ffi::DBUS_TYPE_ARRAY, Some(c"{sv}"), |dict| {
+            dict.with_dict_entry(c"uris", c"as", |variant| {
+                variant.with_container(ffi::DBUS_TYPE_ARRAY, Some(c"s"), |array| {
+                    for uri in uris {
+                        array.append_string(uri);
+                    }
+                });
+            });
+            if let Some(label) = current_filter {
+                dict.with_dict_entry(c"current_filter", c"(sa(us))", |variant| {
+                    variant.with_container(ffi::DBUS_TYPE_STRUCT, None, |filter| {
+                        filter.append_string(label);
+                        filter.with_container(ffi::DBUS_TYPE_ARRAY, Some(c"(us)"), |globs| {
+                            globs.with_container(ffi::DBUS_TYPE_STRUCT, None, |glob| {
+                                glob.append_u32(0);
+                                glob.append_string(c"*.dxf");
+                            });
+                        });
+                    });
+                });
+            }
+        });
+        msg
+    }
+
+    #[test]
+    fn a_response_reports_the_current_filter() {
+        let msg = response_message(0, &[c"file:///plan.dxf"], Some(c"DXF (.dxf)"));
+        assert_eq!(
+            parse_response(&msg),
+            Some(Response {
+                uris: vec![c"file:///plan.dxf".to_owned()],
+                current_filter: Some(c"DXF (.dxf)".to_owned()),
+            })
+        );
+    }
+
+    #[test]
+    fn a_response_without_current_filter_reports_none() {
+        let msg = response_message(0, &[c"file:///plan.dxf"], None);
+        assert_eq!(
+            parse_response(&msg),
+            Some(Response {
+                uris: vec![c"file:///plan.dxf".to_owned()],
+                current_filter: None,
+            })
+        );
+    }
+
+    #[test]
+    fn a_cancelled_response_has_no_uris() {
+        let msg = response_message(1, &[], None);
+        assert_eq!(parse_response(&msg), Some(Response::default()));
+    }
 }

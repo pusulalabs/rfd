@@ -135,6 +135,8 @@ pub use file_handle::FileHandle;
 
 mod file_dialog;
 mod oneshot;
+mod save_filter;
+pub use save_filter::path_with_filter_extension;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use file_dialog::FileDialog;

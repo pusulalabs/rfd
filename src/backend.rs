@@ -116,6 +116,25 @@ pub trait AsyncFileSaveDialogImpl {
     fn save_file_async(self) -> DialogFutureType<Option<FileHandle>>;
 }
 
+/// Save dialog that reports the filter selected when it closed
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(
+        any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ),
+        not(feature = "gtk3")
+    )
+))]
+pub trait AsyncFileSaveWithFilterDialogImpl {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>>;
+}
+
 pub trait AsyncMessageDialogImpl {
     fn show_async(self) -> DialogFutureType<MessageDialogResult>;
 }

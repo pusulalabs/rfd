@@ -47,9 +47,11 @@ objc2-app-kit = { version = "0.3.0", default-features = false, features = [
   "NSControl",
   "NSOpenPanel",
   "NSPanel",
+  "NSPopUpButton",
   "NSResponder",
   "NSRunningApplication",
   "NSSavePanel",
+  "NSTextField",
   "NSView",
   "NSWindow",
 ] }

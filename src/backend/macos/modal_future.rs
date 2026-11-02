@@ -1,3 +1,5 @@
+#![allow(unused_unsafe)]
+
 use block2::Block;
 use dispatch2::run_on_main;
 use objc2::rc::Retained;

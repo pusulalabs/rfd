@@ -1,3 +1,5 @@
+#![allow(unused_unsafe)]
+
 mod focus_manager;
 mod policy_manager;
 mod user_alert;

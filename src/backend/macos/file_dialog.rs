@@ -286,3 +286,24 @@ impl AsyncFileSaveDialogImpl for FileDialog {
         Box::pin(future)
     }
 }
+
+use crate::backend::AsyncFileSaveWithFilterDialogImpl;
+impl AsyncFileSaveWithFilterDialogImpl for FileDialog {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>> {
+        let win = self.parent.as_ref().map(window_from_raw_window_handle);
+
+        let future = ModalFuture::new(
+            win,
+            move |mtm| Panel::build_save_file_with_filter(&self, mtm),
+            |panel, res_id| {
+                if res_id == NSModalResponseOK {
+                    Some((panel.get_result().into(), panel.selected_filter()))
+                } else {
+                    None
+                }
+            },
+        );
+
+        Box::pin(future)
+    }
+}

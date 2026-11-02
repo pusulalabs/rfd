@@ -25,6 +25,7 @@ pub struct FileDialog {
     pub(crate) parent: Option<RawWindowHandle>,
     pub(crate) parent_display: Option<RawDisplayHandle>,
     pub(crate) can_create_directories: Option<bool>,
+    pub(crate) filter_label: Option<String>,
 }
 
 // Oh god, I don't like sending RawWindowHandle between threads but here we go anyways...
@@ -252,12 +253,35 @@ impl AsyncFileDialog {
         self.file_dialog = self.file_dialog.set_can_create_directories(can);
         self
     }
+
+    /// Set the label shown next to the format menu of
+    /// [`AsyncFileDialog::save_file_with_filter`], such as `Format:`.
+    /// Supported in: `macos`; the other platforms label their own filter list.
+    pub fn set_filter_label(mut self, label: impl Into<String>) -> Self {
+        self.file_dialog.filter_label = Some(label.into());
+        self
+    }
 }
 
 #[cfg(target_os = "macos")]
 use crate::backend::AsyncFileOrFolderPickerDialogImpl;
 use crate::backend::AsyncFilePickerDialogImpl;
 use crate::backend::AsyncFileSaveDialogImpl;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(
+        any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ),
+        not(feature = "gtk3")
+    )
+))]
+use crate::backend::AsyncFileSaveWithFilterDialogImpl;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::backend::AsyncFolderPickerDialogImpl;
 
@@ -327,5 +351,42 @@ impl AsyncFileDialog {
     ///       Instead the user is prompted by their browser on where to save the file when [`FileHandle::write`] is used.
     pub fn save_file(self) -> impl Future<Output = Option<FileHandle>> {
         AsyncFileSaveDialogImpl::save_file_async(self.file_dialog)
+    }
+
+    /// Opens save file dialog and reports, with the chosen file, the index
+    /// of the filter selected when the dialog closed, counting the filters
+    /// in the order they were added. The dialog offers each filter on its
+    /// own:
+    /// - On macOS, a menu listing the filter names, labelled by
+    ///   [`AsyncFileDialog::set_filter_label`], sits below the file browser.
+    ///   Picking a filter sets that filter's extensions, lowercased, as the
+    ///   panel's allowed file types and shows the chosen extension in the
+    ///   name field. `allowsOtherFileTypes` stays at its default of NO, so
+    ///   when the user clicks Save, AppKit appends the selected format's
+    ///   extension or shows its own warning. The returned name already ends
+    ///   in an allowed extension.
+    /// - On Linux (XDG portal), the index is the `current_filter` the portal
+    ///   reports. A portal that leaves it out, and the zenity fallback,
+    ///   report the first filter listing the extension of the chosen file,
+    ///   or 0.
+    /// - On Windows, the index is the "Save as type" the user left selected.
+    ///
+    /// Not available with the `gtk3` feature or on WASM32.
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(
+            any(
+                target_os = "linux",
+                target_os = "freebsd",
+                target_os = "dragonfly",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ),
+            not(feature = "gtk3")
+        )
+    ))]
+    pub fn save_file_with_filter(self) -> impl Future<Output = Option<(FileHandle, usize)>> {
+        AsyncFileSaveWithFilterDialogImpl::save_file_with_filter_async(self.file_dialog)
     }
 }

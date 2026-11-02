@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use crate::{
     backend::{
         macos::utils::{FocusManager, PolicyManager},

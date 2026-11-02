@@ -126,6 +126,15 @@ impl DialogInner {
         res.get_path()
     }
 
+    /// The 1-based index of the file type selected in the dialog.
+    #[inline]
+    unsafe fn get_file_type_index(&self) -> Result<u32> {
+        let (d, v) = self.fd();
+        let mut index = 0;
+        wrap_err((v.GetFileTypeIndex)(d, &mut index))?;
+        Ok(index)
+    }
+
     #[inline]
     unsafe fn get_results(&self) -> Result<Vec<PathBuf>> {
         let Self::Open(od) = self else { unreachable!() };
@@ -279,6 +288,11 @@ impl IDialog {
 
     pub fn get_result(&self) -> Result<PathBuf> {
         unsafe { self.0.get_result() }
+    }
+
+    /// The 1-based index of the file type selected when the dialog closed.
+    pub fn get_file_type_index(&self) -> Result<u32> {
+        unsafe { self.0.get_file_type_index() }
     }
 
     pub fn show(&self) -> Result<()> {

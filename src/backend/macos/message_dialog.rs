@@ -1,3 +1,5 @@
+#![allow(unused_unsafe)]
+
 use crate::backend::DialogFutureType;
 use crate::message_dialog::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 

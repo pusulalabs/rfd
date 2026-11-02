@@ -1,10 +1,10 @@
 # rfd in Cady
 
-This directory is the crates.io package of [rfd](https://github.com/PolyMeilex/rfd)
-0.17.2 (upstream commit `cca0cfa5fc38c2752c9c98f9f5168904a515fd55`, see
-`.cargo_vcs_info.json`), licensed under MIT (`LICENSE`). The root
-`Cargo.toml` uses it through `[patch.crates-io]` and keeps it out of the
-workspace.
+The `cady` branch of this fork is [rfd](https://github.com/PolyMeilex/rfd)
+0.17.2 (upstream commit `cca0cfa5fc38c2752c9c98f9f5168904a515fd55`) with
+the changes below, licensed under MIT (`LICENSE`). Cady's root `Cargo.toml`
+takes it through `[patch.crates-io]` as a git dependency pinned to a commit
+on this branch.
 
 ## Changes
 
@@ -55,27 +55,21 @@ fork adds one API and leaves the existing ones as they are:
 - `Cargo.toml` enables the `NSPopUpButton` and `NSTextField` features of
   `objc2-app-kit`. The `deprecated` and `unused_unsafe` allows sit on the
   upstream backend modules, not on the crate, so the format menu is still
-  checked. An empty `[workspace]` table makes the crate its own workspace,
-  so Cargo does not look for an enclosing one when it runs the fork's tests.
+  checked. The `objc2-app-kit` requirement is 0.3.2, the first release
+  where the panel and pop-up button methods used here are safe to call.
 - `Cargo.lock` locks objc2, objc2-app-kit, objc2-foundation,
   objc2-core-foundation, block2 and dispatch2 at the versions Cady locks, so
   the fork's tests build the macOS backend against the same API as Cady.
 
-Diffing `vendor/rfd` against the commit
-`chore(vendor): vendor rfd 0.17.2 unchanged` shows every change against
-upstream.
+`git diff cca0cfa5fc38c2752c9c98f9f5168904a515fd55 cady` shows every change
+against upstream.
 
 ## Tests
 
-The fork is outside Cady's workspace, so nextest does not run its tests.
-CI runs them on Linux in their own step:
+The upstream `rust.yml` and `cargo-deny.yml` workflows also run on pushes
+to `cady`, so the tests build and run on Linux (GTK and XDG portal),
+Windows, macOS and WASM32. Locally:
 
 ```sh
-pixi run cargo test --locked --manifest-path vendor/rfd/Cargo.toml --lib --no-default-features --features xdg-portal
+cargo test --lib --no-default-features --features xdg-portal
 ```
-
-Without Cady's winit, which loads libwayland at runtime, the `wayland`
-feature links `wayland-client` through pkg-config; none of the tests need
-it.
-
-The portal parser tests run only on Linux and need `libdbus-1.so.3`.

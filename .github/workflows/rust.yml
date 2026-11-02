@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - cady
   pull_request:
 
 jobs:

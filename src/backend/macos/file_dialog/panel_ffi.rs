@@ -96,13 +96,12 @@ impl Panel {
         }
     }
 
-    /// The index of the filter selected in the format menu, or 0 for a
-    /// panel without one.
-    pub fn selected_filter(&self) -> usize {
+    /// The index of the filter selected in the format menu, or `None` for a
+    /// panel without one or a menu with nothing selected.
+    pub fn selected_filter(&self) -> Option<usize> {
         self.format_menu
             .as_ref()
             .and_then(|menu| usize::try_from(menu.selected_index()).ok())
-            .unwrap_or(0)
     }
 
     pub fn get_results(&self) -> Vec<PathBuf> {

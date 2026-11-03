@@ -10,7 +10,7 @@ use super::linux::zenity;
 use crate::backend::DialogFutureType;
 use crate::file_dialog::Filter;
 use crate::message_dialog::MessageDialog;
-use crate::save_filter::{filter_index_for_path, filter_index_from_portal};
+use crate::save_filter::filter_index_from_portal;
 use crate::{FileDialog, FileHandle, MessageButtons, MessageDialogResult};
 
 use log::{error, warn};
@@ -253,8 +253,8 @@ impl FileSaveDialogImpl for FileDialog {
 }
 
 /// The chosen file and the index of the filter selected when the dialog
-/// closed.
-fn save_file_with_filter(dialog: FileDialog) -> Option<(PathBuf, usize)> {
+/// closed, `None` when the dialog does not report it.
+fn save_file_with_filter(dialog: FileDialog) -> Option<(PathBuf, Option<usize>)> {
     let window_identifier = to_window_identifier(dialog.parent, dialog.parent_display);
     let res = portal::save_file(portal::SaveFileOptions {
         parent_window: window_identifier
@@ -274,15 +274,15 @@ fn save_file_with_filter(dialog: FileDialog) -> Option<(PathBuf, usize)> {
             .current_filter
             .as_deref()
             .and_then(|label| label.to_str().ok());
-        let index = filter_index_from_portal(&dialog.filters, current_filter, &path);
-        Some((path, index))
+        Some((
+            path,
+            filter_index_from_portal(&dialog.filters, current_filter),
+        ))
     } else {
         warn!("Using zenity fallback");
+        // Zenity prints only the chosen path, not the filter it had selected.
         match block_on(zenity::save_file(&dialog)) {
-            Ok(res) => res.map(|path| {
-                let index = filter_index_for_path(&dialog.filters, &path);
-                (path, index)
-            }),
+            Ok(res) => res.map(|path| (path, None)),
             Err(err) => {
                 error!("Failed to save file with zenity: {err}");
                 None
@@ -300,7 +300,7 @@ impl AsyncFileSaveDialogImpl for FileDialog {
 
 use crate::backend::AsyncFileSaveWithFilterDialogImpl;
 impl AsyncFileSaveWithFilterDialogImpl for FileDialog {
-    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>> {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, Option<usize>)>> {
         async_thread(move || {
             save_file_with_filter(self).map(|(path, index)| (FileHandle::wrap(path), index))
         })

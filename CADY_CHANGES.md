@@ -13,7 +13,11 @@ needs to know which one was picked. rfd reports only the chosen path, so the
 fork adds one API and leaves the existing ones as they are:
 
 - `AsyncFileDialog::save_file_with_filter()` returns the chosen file and the
-  index of the filter selected when the dialog closed.
+  index of the filter selected when the dialog closed, or `None` when the
+  dialog does not report it. The path's extension does not stand in for a
+  missing index: several filters can list the same extension, as Cady's DXF
+  versions all list `dxf`, so the caller decides what an unknown filter
+  means.
   `AsyncFileDialog::set_filter_label()` sets the label of the macOS format
   menu.
   - macOS: the save panel gets an accessory view with the label and an
@@ -31,11 +35,11 @@ fork adds one API and leaves the existing ones as they are:
     entry such as `plan.ncz` with DXF selected becomes `plan.ncz.dxf`, or
     AppKit shows its warning; it does not become `plan.dxf`.
   - Linux (XDG portal): the portal response parser also reads
-    `current_filter`, matched to a filter by its label; without it, and in
-    the zenity fallback, the path's extension picks the filter.
-  - Windows: `IFileDialog::GetFileTypeIndex` after the dialog closes. If that
-    call fails, the path's extension picks the filter, as the Linux portal
-    does when it reports no current filter.
+    `current_filter`, matched to a filter by its label. A response without
+    it, or naming no filter of the dialog, and the zenity fallback, which
+    prints only the path, report `None`.
+  - Windows: `IFileDialog::GetFileTypeIndex` after the dialog closes, or
+    `None` when that call fails.
   - Not available with the `gtk3` feature or on WASM32.
 - `path_with_filter_extension` is the rule the macOS format menu renames
   the name field with: a name keeps an extension of the chosen filter, an

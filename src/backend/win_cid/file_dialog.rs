@@ -4,7 +4,7 @@ pub mod dialog_ffi;
 use dialog_ffi::{IDialog, Result};
 
 use crate::backend::DialogFutureType;
-use crate::save_filter::filter_index_after_confirmed_save;
+use crate::save_filter::filter_index_from_file_type_index;
 use crate::FileDialog;
 use crate::FileHandle;
 
@@ -142,14 +142,16 @@ impl AsyncFileSaveDialogImpl for FileDialog {
 
 use crate::backend::AsyncFileSaveWithFilterDialogImpl;
 impl AsyncFileSaveWithFilterDialogImpl for FileDialog {
-    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>> {
-        fn run(opt: FileDialog) -> Result<(PathBuf, usize)> {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, Option<usize>)>> {
+        fn run(opt: FileDialog) -> Result<(PathBuf, Option<usize>)> {
             init_com(|| {
                 let dialog = IDialog::build_save_file(&opt)?;
                 dialog.show()?;
                 let path = dialog.get_result()?;
-                let file_type_index = dialog.get_file_type_index().ok();
-                let index = filter_index_after_confirmed_save(file_type_index, &opt.filters, &path);
+                let index = dialog
+                    .get_file_type_index()
+                    .ok()
+                    .map(filter_index_from_file_type_index);
                 Ok((path, index))
             })?
         }

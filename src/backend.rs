@@ -132,7 +132,7 @@ pub trait AsyncFileSaveDialogImpl {
     )
 ))]
 pub trait AsyncFileSaveWithFilterDialogImpl {
-    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>>;
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, Option<usize>)>>;
 }
 
 pub trait AsyncMessageDialogImpl {

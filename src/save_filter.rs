@@ -18,43 +18,17 @@ use std::path::{Path, PathBuf};
         ),
         not(feature = "gtk3"),
     ),
-    target_os = "windows",
     test,
 ))]
 use crate::file_dialog::Filter;
 
-/// The index of the first of `filters` listing the extension of `path`,
-/// ignoring ASCII case, or 0 when none does.
-#[cfg(any(
-    all(
-        any(
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "netbsd",
-            target_os = "openbsd",
-        ),
-        not(feature = "gtk3"),
-    ),
-    target_os = "windows",
-    test,
-))]
-pub(crate) fn filter_index_for_path(filters: &[Filter], path: &Path) -> usize {
-    path.extension()
-        .and_then(|extension| {
-            filters.iter().position(|filter| {
-                filter
-                    .extensions
-                    .iter()
-                    .any(|candidate| extension.eq_ignore_ascii_case(candidate))
-            })
-        })
-        .unwrap_or(0)
-}
-
 /// The index of the filter the XDG portal reported as `current_filter`,
-/// matched by its label. The portal may leave `current_filter` out of its
-/// response; the extension of `path` decides then.
+/// matched by its label, or `None` when the portal left `current_filter` out
+/// of its response or named no filter of the dialog.
+///
+/// The path's extension does not stand in for a missing `current_filter`:
+/// several filters can list the same extension, and a name without one
+/// says nothing about the filter.
 #[cfg(any(
     all(
         any(
@@ -71,11 +45,9 @@ pub(crate) fn filter_index_for_path(filters: &[Filter], path: &Path) -> usize {
 pub(crate) fn filter_index_from_portal(
     filters: &[Filter],
     current_filter: Option<&str>,
-    path: &Path,
-) -> usize {
-    current_filter
-        .and_then(|label| filters.iter().position(|filter| filter.name == label))
-        .unwrap_or_else(|| filter_index_for_path(filters, path))
+) -> Option<usize> {
+    let label = current_filter?;
+    filters.iter().position(|filter| filter.name == label)
 }
 
 /// The filter index of `IFileDialog::GetFileTypeIndex`, which counts the
@@ -83,23 +55,6 @@ pub(crate) fn filter_index_from_portal(
 #[cfg(any(target_os = "windows", test))]
 pub(crate) fn filter_index_from_file_type_index(file_type_index: u32) -> usize {
     usize::try_from(file_type_index.saturating_sub(1)).unwrap_or(0)
-}
-
-/// The filter index of a Windows save the user confirmed.
-///
-/// `file_type_index` is `IFileDialog::GetFileTypeIndex` when that call
-/// succeeds. When it fails, the extension of `path` picks the filter, as
-/// the Linux portal does when it reports no current filter.
-#[cfg(any(target_os = "windows", test))]
-pub(crate) fn filter_index_after_confirmed_save(
-    file_type_index: Option<u32>,
-    filters: &[Filter],
-    path: &Path,
-) -> usize {
-    match file_type_index {
-        Some(index) => filter_index_from_file_type_index(index),
-        None => filter_index_for_path(filters, path),
-    }
 }
 
 /// `path` ending in an extension of `filter_extensions[chosen]`, the
@@ -247,35 +202,19 @@ mod tests {
     #[test]
     fn portal_current_filter_picks_the_filter_by_label() {
         assert_eq!(
-            filter_index_from_portal(&filters(), Some("DXF (.dxf)"), Path::new("/plan.cady")),
-            2
+            filter_index_from_portal(&filters(), Some("DXF (.dxf)")),
+            Some(2)
         );
         assert_eq!(
-            filter_index_from_portal(&filters(), Some("NCZ (.ncz)"), Path::new("/plan")),
-            1
+            filter_index_from_portal(&filters(), Some("NCZ (.ncz)")),
+            Some(1)
         );
     }
 
     #[test]
-    fn without_portal_current_filter_the_extension_picks_the_filter() {
-        let filters = filters();
-        for (path, index) in [
-            ("/plan.ncz", 1),
-            ("/plan.DXF", 2),
-            ("/plan.cady", 0),
-            ("/plan", 0),
-            ("/plan.txt", 0),
-        ] {
-            assert_eq!(
-                filter_index_from_portal(&filters, None, Path::new(path)),
-                index,
-                "{path}"
-            );
-        }
-        assert_eq!(
-            filter_index_from_portal(&filters, Some("Unknown"), Path::new("/plan.dxf")),
-            2
-        );
+    fn a_portal_without_a_known_current_filter_reports_none() {
+        assert_eq!(filter_index_from_portal(&filters(), None), None);
+        assert_eq!(filter_index_from_portal(&filters(), Some("Unknown")), None);
     }
 
     #[test]
@@ -283,27 +222,6 @@ mod tests {
         assert_eq!(filter_index_from_file_type_index(1), 0);
         assert_eq!(filter_index_from_file_type_index(3), 2);
         assert_eq!(filter_index_from_file_type_index(0), 0);
-    }
-
-    #[test]
-    fn a_missing_windows_file_type_index_uses_the_path_extension() {
-        let filters = filters();
-        assert_eq!(
-            filter_index_after_confirmed_save(Some(1), &filters, Path::new("plan.dxf")),
-            0
-        );
-        assert_eq!(
-            filter_index_after_confirmed_save(None, &filters, Path::new("plan.dxf")),
-            2
-        );
-        assert_eq!(
-            filter_index_after_confirmed_save(None, &filters, Path::new("plan.ncz")),
-            1
-        );
-        assert_eq!(
-            filter_index_after_confirmed_save(None, &filters, Path::new("plan")),
-            0
-        );
     }
 
     #[test]

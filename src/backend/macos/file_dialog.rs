@@ -289,7 +289,7 @@ impl AsyncFileSaveDialogImpl for FileDialog {
 
 use crate::backend::AsyncFileSaveWithFilterDialogImpl;
 impl AsyncFileSaveWithFilterDialogImpl for FileDialog {
-    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, usize)>> {
+    fn save_file_with_filter_async(self) -> DialogFutureType<Option<(FileHandle, Option<usize>)>> {
         let win = self.parent.as_ref().map(window_from_raw_window_handle);
 
         let future = ModalFuture::new(

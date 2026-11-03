@@ -355,8 +355,8 @@ impl AsyncFileDialog {
 
     /// Opens save file dialog and reports, with the chosen file, the index
     /// of the filter selected when the dialog closed, counting the filters
-    /// in the order they were added. The dialog offers each filter on its
-    /// own:
+    /// in the order they were added, or `None` when the dialog does not
+    /// report it. The dialog offers each filter on its own:
     /// - On macOS, a menu listing the filter names, labelled by
     ///   [`AsyncFileDialog::set_filter_label`], sits below the file browser.
     ///   Picking a filter sets that filter's extensions, lowercased, as the
@@ -366,10 +366,10 @@ impl AsyncFileDialog {
     ///   extension or shows its own warning. The returned name already ends
     ///   in an allowed extension.
     /// - On Linux (XDG portal), the index is the `current_filter` the portal
-    ///   reports. A portal that leaves it out, and the zenity fallback,
-    ///   report the first filter listing the extension of the chosen file,
-    ///   or 0.
-    /// - On Windows, the index is the "Save as type" the user left selected.
+    ///   reports. A portal that leaves it out, or names a filter the dialog
+    ///   does not have, and the zenity fallback report `None`.
+    /// - On Windows, the index is the "Save as type" the user left selected,
+    ///   or `None` when `IFileDialog::GetFileTypeIndex` fails.
     ///
     /// Not available with the `gtk3` feature or on WASM32.
     #[cfg(any(
@@ -386,7 +386,9 @@ impl AsyncFileDialog {
             not(feature = "gtk3")
         )
     ))]
-    pub fn save_file_with_filter(self) -> impl Future<Output = Option<(FileHandle, usize)>> {
+    pub fn save_file_with_filter(
+        self,
+    ) -> impl Future<Output = Option<(FileHandle, Option<usize>)>> {
         AsyncFileSaveWithFilterDialogImpl::save_file_with_filter_async(self.file_dialog)
     }
 }

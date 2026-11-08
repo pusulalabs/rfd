@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - cady
+      - haritacad
   pull_request:
 
 jobs:

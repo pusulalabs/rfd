@@ -1,21 +1,21 @@
-# rfd in Cady
+# rfd in HaritaCAD
 
-The `cady` branch of this fork is [rfd](https://github.com/PolyMeilex/rfd)
+The `haritacad` branch of this fork is [rfd](https://github.com/PolyMeilex/rfd)
 0.17.2 (upstream commit `cca0cfa5fc38c2752c9c98f9f5168904a515fd55`) with
-the changes below, licensed under MIT (`LICENSE`). Cady's root `Cargo.toml`
+the changes below, licensed under MIT (`LICENSE`). HaritaCAD's root `Cargo.toml`
 takes it through `[patch.crates-io]` as a git dependency pinned to a commit
 on this branch.
 
 ## Changes
 
-Cady's Save As lets the user pick the file format in the native dialog and
+HaritaCAD's Save As lets the user pick the file format in the native dialog and
 needs to know which one was picked. rfd reports only the chosen path, so the
 fork adds one API and leaves the existing ones as they are:
 
 - `AsyncFileDialog::save_file_with_filter()` returns the chosen file and the
   index of the filter selected when the dialog closed, or `None` when the
   dialog does not report it. The path's extension does not stand in for a
-  missing index: several filters can list the same extension, as Cady's DXF
+  missing index: several filters can list the same extension, as HaritaCAD's DXF
   versions all list `dxf`, so the caller decides what an unknown filter
   means.
   `AsyncFileDialog::set_filter_label()` sets the label of the macOS format
@@ -30,7 +30,7 @@ fork adds one API and leaves the existing ones as they are:
     `allowsOtherFileTypes` stays at its default of NO. When the user clicks
     Save, AppKit appends the selected format's extension or shows its own
     warning. The name the dialog returns already ends in an allowed
-    extension, so Cady's replace question, which asks only when Cady itself
+    extension, so HaritaCAD's replace question, which asks only when HaritaCAD itself
     renamed the path onto an existing file, does not appear on macOS. An
     entry such as `plan.ncz` with DXF selected becomes `plan.ncz.dxf`, or
     AppKit shows its warning; it does not become `plan.dxf`.
@@ -44,7 +44,7 @@ fork adds one API and leaves the existing ones as they are:
 - `path_with_filter_extension` is the rule the macOS format menu renames
   the name field with: a name keeps an extension of the chosen filter, an
   extension of another filter is replaced, and any other name gets the
-  chosen filter's first extension appended. Cady applies the same function
+  chosen filter's first extension appended. HaritaCAD applies the same function
   to every path its save dialogs return. On macOS the returned path already
   ends in the selected extension, so the call leaves it unchanged.
 - `src/save_filter.rs` holds the platform-independent helpers and their
@@ -53,7 +53,7 @@ fork adds one API and leaves the existing ones as they are:
   the class definition, its `init`, and the popup's target and action. Each
   block has a `// SAFETY:` comment. `apply_format_menu` calls
   `nameFieldStringValue`, `setNameFieldStringValue`, and
-  `setAllowedFileTypes`, which are safe methods in the objc2 version Cady
+  `setAllowedFileTypes`, which are safe methods in the objc2 version HaritaCAD
   locks, so that function has no `unsafe`. `setAllowedFileTypes` is
   deprecated; the call carries `#[expect(deprecated)]`.
 - `Cargo.toml` enables the `NSPopUpButton` and `NSTextField` features of
@@ -62,16 +62,16 @@ fork adds one API and leaves the existing ones as they are:
   checked. The `objc2-app-kit` requirement is 0.3.2, the first release
   where the panel and pop-up button methods used here are safe to call.
 - `Cargo.lock` locks objc2, objc2-app-kit, objc2-foundation,
-  objc2-core-foundation, block2 and dispatch2 at the versions Cady locks, so
-  the fork's tests build the macOS backend against the same API as Cady.
+  objc2-core-foundation, block2 and dispatch2 at the versions HaritaCAD locks, so
+  the fork's tests build the macOS backend against the same API as HaritaCAD.
 
-`git diff cca0cfa5fc38c2752c9c98f9f5168904a515fd55 cady` shows every change
+`git diff cca0cfa5fc38c2752c9c98f9f5168904a515fd55 haritacad` shows every change
 against upstream.
 
 ## Tests
 
 The upstream `rust.yml` and `cargo-deny.yml` workflows also run on pushes
-to `cady`, so the tests build and run on Linux (GTK and XDG portal),
+to `haritacad`, so the tests build and run on Linux (GTK and XDG portal),
 Windows, macOS and WASM32. Locally:
 
 ```sh
